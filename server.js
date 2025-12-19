@@ -1,12 +1,14 @@
+require('dotenv').config({ quiet: true });
 const express = require('express');
 const mongoose = require('mongoose');
-
+const cors = require('cors');
 const app = express();
+
+app.use(cors());
 app.use(express.json());
-const port = 8080;
 
 mongoose
-	.connect('mongodb+srv://20225316:1@cluster0.o12cuh2.mongodb.net/hieunt225316')
+	.connect(process.env.MONGO_URI)
 	.then(() => {
 		console.log('MongoDB connected');
 	})
@@ -74,6 +76,7 @@ app.get('/', (req, res) => {
 	res.send('hello world');
 });
 
-app.listen(port, () => {
-	console.log('Express is listening on port ', port);
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+	console.log('Express is listening on port ', PORT);
 });

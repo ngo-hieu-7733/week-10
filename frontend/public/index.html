@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+		<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+		<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+		<style type="text/css"></style>
+
+		<style>
+			.modal-overlay {
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.4);
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				z-index: 999;
+			}
+			/* Modal Content */
+			.modal-content {
+				background: #fff;
+				padding: 6px;
+				border-radius: 6px;
+				width: 300px;
+			}
+
+			.app-container {
+				display: flex;
+				flex-direction: column;
+				justify-content: center;
+				align-items: center;
+				gap: 10px;
+			}
+
+			table,
+			tr,
+			td {
+				border: 1px solid black;
+			}
+			tr,
+			td {
+				padding: 10px;
+			}
+
+			.btn-edit {
+				color: white;
+				background-color: green;
+				margin-right: 10px;
+			}
+			.btn-delete {
+				color: white;
+				background-color: red;
+			}
+
+			input {
+				width: 100%;
+				height: 30px;
+				box-sizing: border-box;
+			}
+
+			.btn-add-container {
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				gap: 10px;
+			}
+			.input-search {
+				width: 50%;
+			}
+			.btn-add-user {
+				background-color: deepskyblue;
+				color: white;
+			}
+
+            @media (max-width: 768px) {
+                table {
+                    display: block;
+                    overflow-x: auto;
+                    font-size: 12px;
+                }
+                td, th {
+                    padding: 8px 4px;
+                }
+                .modal-content {
+                    width: 90%;
+                    padding: 15px;
+                }
+                button {
+                    min-width: 44px;
+                    min-height: 44px;
+                }
+            }
+		</style>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script type="text/babel">
+			const api = axios.create({
+				baseURL: 'http://localhost:8080/api',
+				timeout: 10000,
+				headers: {
+					'Content-Type': 'application/json',
+				},
+			});
+
+			function App() {
+				const [kw, setKeyword] = React.useState('');
+				const [newUser, setNewUser] = React.useState(null);
+
+				return (
+					<div className="app-container">
+						<h1>Quản lý người dùng</h1>
+						<SearchForm setKeyword={setKeyword} />
+						<AddUser onAdd={setNewUser} />
+						<ResultTable
+							keyword={kw}
+							user={newUser}
+							onAdded={() => setNewUser(null)}
+						/>
+					</div>
+				);
+			}
+
+			function SearchForm({ setKeyword }) {
+				const [searchTerm, setSearchTerm] = React.useState('');
+				const [searchInput, setSearchInput] = React.useState("");
+				React.useEffect(() => {
+					const timer = setTimeout(() => {
+						setKeyword(searchInput);
+					}, 200); // Đợi 200ms sau khi user ngừng gõ
+					return () => clearTimeout(timer);
+				}, [searchInput]);
+
+				return (
+						<input
+								className="input-search"
+								type="text"
+								placeholder="Tìm theo Name hoặc Email"
+								onChange={(e) => setSearchInput(e.target.value)}
+						/>
+				);
+			}
+
+			function ResultTable({ keyword, user, onAdded }) {
+				const [page, setPage] = React.useState(1);
+				const [totalPages, setTotalPages] = React.useState(1);
+				const [limit, setLimit] = React.useState(5);
+				const [users, setUsers] = React.useState([]);
+				const [editing, setEditing] = React.useState(null);
+				const [stt, setStt] = React.useState(1);
+
+
+				React.useEffect(() => {
+					console.log('Fetching users with keyword:', keyword, 'page:', page, 'limit:', limit);   
+					const fetchUser = async () => {
+						await api.get(`/users?page=${page}&limit=${limit}&search=${keyword}`).then((response) => {
+							console.log(`Fetched users: `, response.data?.data);
+							setUsers(response?.data?.data);
+							setTotalPages(response?.data?.totalPages || 1);
+							setStt(page);
+						});
+					};
+					fetchUser();
+				}, [keyword, page, limit]);
+
+				function handleLimitChange(e) {
+					setPage(1); // Reset về trang 1 khi từ khóa tìm kiếm hoặc giới hạn thay đổi
+					setLimit(Number(e.target.value));
+				}
+				React.useEffect(() => {
+					onAdded();
+				}, [user]);
+
+				function editUser(user) {
+					setEditing(user);
+				}
+
+				async function removeUser(id) {
+					console.log('Removing user with id:', id);
+					await api.delete(`/users/${id}`)
+						.then((res) => {
+							console.log('Deleted user:', res.data);
+							setUsers((prev) => prev.filter((u) => u._id != id));
+							setPage(1)
+						})
+						.catch((err) => {
+							console.log(err);
+							alert('Xóa người dùng thất bại');
+							alert(JSON.stringify(err));
+						});
+				}
+
+				const handleChange = (e) => {
+					const { id, value } = e.target;
+					console.log(id, value);
+					setEditing({ ...editing, [id]: value });
+				};
+
+				async function handleSave() {
+					await api.put(`/users/${editing._id}`, { ...editing, age: Number(editing.age) }) // Chuyển age về kiểu Number
+						.then((res) => {
+							console.log('Updated user:', res.data);
+							setUsers((prev) => prev.map((u) => (u._id === editing._id ? editing : u)));
+						})
+						.catch((err) => {
+							console.log(err);
+							alert('Cập nhật người dùng thất bại');
+							alert(JSON.stringify(err));
+						})
+						.finally(() => {
+							setEditing(null);
+						});
+				}
+
+				return (
+					<div className="table-container" >
+						{/* Table of users */}
+						<table>
+							<thead>
+								<tr>
+									<td>STT</td>
+									<td>Name</td>
+									<td>Email</td>
+									<td>Age</td>
+									<td>Address</td>
+									<td>Thao tác</td>
+								</tr>
+							</thead>
+							<tbody>
+								{users.map((u, i) => (
+									<tr key={u._id}>
+										<td>{(i + 1) + (page - 1) * limit}</td>
+										<td>{u.name}</td>
+										<td>{u.email}</td>
+										<td>{u.age}</td>
+										<td>{u.address}</td>
+										<td>
+											<button
+												onClick={() => editUser(u)}
+												className="btn-edit"
+											>
+												Sửa
+											</button>
+											<button
+												onClick={() => removeUser(u._id)}
+												className="btn-delete"
+											>
+												Xóa
+											</button>
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+
+						{editing && (
+							<div>
+								<div>
+									<h4>Sửa người dùng</h4>
+									<label htmlFor="name">Name</label>
+									<input
+										id="name"
+										type="text"
+										value={editing.name}
+										onChange={handleChange}
+									/>
+
+									<br />
+									<label htmlFor="email">Email</label>
+									<input
+										id="email"
+										type="text"
+										value={editing.email}
+										onChange={handleChange}
+									/>
+
+									<br />
+									<label htmlFor="age">Age</label>
+									<input
+										id="age"
+										type="text"
+										value={editing.age}
+										onChange={handleChange}
+									/>
+
+									<br />
+									<label htmlFor="address">Address</label>
+									<input
+										id="address"
+										type="text"
+										value={editing.address}
+										onChange={handleChange}
+									/>
+
+									<br />
+									<button onClick={handleSave}>Lưu</button>
+									<button onClick={() => setEditing(null)}>Hủy</button>
+								</div>
+							</div>
+						)}
+                        
+						<p style={{display: 'flex', justifyContent: 'center', margin: 0, marginTop: 50}}> Hiển thị: 
+							<select value={limit} onChange={handleLimitChange} style={{ marginLeft: 10, marginRight: 10 }}> 
+								<option value="3">3</option>
+								<option value="5">5</option>
+								<option	option value="10">10</option>
+							</select>
+							dòng/trang
+						</p>
+						<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
+							<button onClick={() => page > 1 && setPage(page - 1)}>Prev</button>
+
+							<p>Trang {page}/{totalPages}</p>
+							
+							<button onClick={() => page < totalPages && setPage(page + 1)}>Next</button>
+						</div>
+					</div>
+				)}
+
+			function AddUser({ onAdd }) {
+				const [adding, setAdding] = React.useState(false);
+				const [checkName, setCheckName] = React.useState(false);
+				const [checkAge, setCheckAge] = React.useState(false);
+				const [checkEmail, setCheckEmail] = React.useState(false);
+				const [user, setUser] = React.useState({
+					name: '',
+					age: '',
+					email: '',
+					address: '',
+				});
+
+				const handleChange = async (e) => {
+					const { id, value } = e.target;
+					if (id == 'age') {
+						setUser({ ...user, [id]: Number(value) });
+					} else {
+						setUser({ ...user, [id]: value.trim() });// Loại bỏ khoảng trắng thừa
+					}
+				};
+
+				const handleAdd = async () => {
+					if (user.name === '') {
+						setCheckName(true);
+						return;
+					} else if (user.name.length < 2) {
+							setCheckName(true);
+							return;
+					}
+					if (user.age < 0 || user.age === '') {
+							setCheckAge(true);
+							setCheckName(false);
+							return;
+					}
+					if (user.email === '') {
+							setCheckEmail(true);
+							setCheckName(false);
+							setCheckAge(false); 
+							return;
+					} else if (!/^\S+@\S+\.\S+$/.test(user.email)) {
+							setCheckEmail(true);
+							setCheckName(false);
+							setCheckAge(false); 
+							return;
+					}
+
+					await api.post('/users', user)
+						.then((res) => {
+							const data = JSON.stringify(res.data);
+							onAdd(data);
+							setUser({
+								name: '',
+								age: '',
+								email: '',
+								address: '',
+							});
+							return data;
+						})
+						.catch((err) => {
+							console.log(err);
+							if (err?.response?.data?.code) {
+								const code = err.response.data.code;
+								if (code === 1) {
+										alert('Thêm người dùng thất bại: Tuổi phải là số nguyên');
+								} else if (code === 2) {
+										alert('Thêm người dùng thất bại: Email đã tồn tại');
+								} else {
+										alert('Thêm người dùng thất bại: ' + err.response.data.error);
+								}
+							} else {
+								alert('Thêm người dùng thất bại: ' + err.message);
+							}
+						});
+
+					setAdding(false);
+					setCheckName(false);
+					setCheckAge(false); 
+					setCheckEmail(false);
+				};
+
+				return (
+					<div>
+						<button
+							className="btn-add-user"
+							onClick={() => setAdding(true)}
+						>
+							Thêm người dùng
+						</button>
+						{adding && (
+							<div className="modal-overlay">
+								<div className="modal-content">
+									<h4>Thêm người dùng</h4>
+									<label htmlFor="name">Name</label>
+									<input
+										id="name"
+										type="text"
+										value={user.name}
+										onChange={handleChange}
+									/>
+									{checkName && <span style={{color: 'red'}}>Vui lòng nhập tên hợp lệ (tối thiểu 2 ký tự)</span>}
+									<br />
+									<label htmlFor="age">Age</label>
+									<input
+										id="age"
+										type="number"
+										value={user.age}
+										onChange={handleChange}
+									/>
+									{checkAge && <span style={{color: 'red'}}>Vui lòng nhập tuổi hợp lệ (Age &gt;= 0)</span>}
+									<br />
+									<label htmlFor="email">Email</label>
+									<input
+										id="email"
+										type="text"
+										value={user.email}
+										onChange={handleChange}
+									/>
+									{checkEmail && <span style={{color: 'red'}}>Vui lòng nhập email hợp lệ</span>}
+									<br />
+									<label htmlFor="address">Address</label>
+									<input
+										id="address"
+										type="text"
+										value={user.address}
+										onChange={handleChange}
+									/>
+									<br />
+									<br />
+									<div className="btn-add-container">
+										<button onClick={handleAdd}>Thêm</button>
+										<button onClick={() => setAdding(false)}>Hủy</button>
+									</div>
+								</div>
+							</div>
+						)}
+					</div>
+				);
+			}
+
+			const root = ReactDOM.createRoot(document.getElementById('root'));
+			root.render(<App />);
+		</script>
+	</body>
+</html>
